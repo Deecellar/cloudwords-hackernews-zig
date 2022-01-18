@@ -1,0 +1,6 @@
+[submodule "zelda"]
+	path = vendor/zelda
+	url = https://github.com/haze/zelda
+[submodule "sdk"]
+	path = vendor/sdk
+	url = https://github.com/TinyVG/sdk
