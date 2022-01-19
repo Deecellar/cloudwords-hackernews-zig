@@ -1,29 +1,29 @@
 const std = @import("std");
 const buildLibressl = @import("vendor/zelda/zig-libressl/build.zig");
 pub fn getAllPkg(comptime T: type) CalculatePkg(T) {
-            const info: std.builtin.TypeInfo = @typeInfo(T);
-            const  declarations: []const std.builtin.TypeInfo.Declaration = info.Struct.decls;
-            var pkgs: CalculatePkg(T) = undefined;
-            var index: usize = 0;
-            inline for (declarations) |d| {
-                if (d.data == .Var) {
-                    pkgs[index] = @field(T, d.name);
-                    index += 1;
-                }
-            }
-            return pkgs;
+    const info: std.builtin.TypeInfo = @typeInfo(T);
+    const declarations: []const std.builtin.TypeInfo.Declaration = info.Struct.decls;
+    var pkgs: CalculatePkg(T) = undefined;
+    var index: usize = 0;
+    inline for (declarations) |d| {
+        if (d.data == .Var) {
+            pkgs[index] = @field(T, d.name);
+            index += 1;
         }
-        fn CalculatePkg(comptime T: type) type {
-            const info: std.builtin.TypeInfo = @typeInfo(T);
-            const  declarations: []const std.builtin.TypeInfo.Declaration = info.Struct.decls;
-            var count: usize = 0;
-            for (declarations) |d| {
-                if (d.data == .Var) {
-                    count += 1;
-                }
-            }
-            return [count]std.build.Pkg;
+    }
+    return pkgs;
+}
+fn CalculatePkg(comptime T: type) type {
+    const info: std.builtin.TypeInfo = @typeInfo(T);
+    const declarations: []const std.builtin.TypeInfo.Declaration = info.Struct.decls;
+    var count: usize = 0;
+    for (declarations) |d| {
+        if (d.data == .Var) {
+            count += 1;
         }
+    }
+    return [count]std.build.Pkg;
+}
 pub fn build(b: *std.build.Builder) void {
     const pkgs = struct {
         pub const hzzp = std.build.Pkg{
@@ -62,7 +62,6 @@ pub fn build(b: *std.build.Builder) void {
             .name = "zig-args",
             .path = .{ .path = "vendor/sdk/vendor/zig-args/args.zig" },
         };
-        
     };
     const packages = getAllPkg(pkgs);
     // Standard target options allows the person running `zig build` to choose
@@ -74,15 +73,19 @@ pub fn build(b: *std.build.Builder) void {
     // Standard release options allow the person running `zig build` to select
     // between Debug, ReleaseSafe, ReleaseFast, and ReleaseSmall.
     const mode = b.standardReleaseOptions();
-
+    const strip: bool = b.option(bool, "strip", "Stripts the release build (false by default)") orelse false;
     const exe = b.addExecutable("cloudwords-hackernews-zig", "src/main.zig");
     exe.linkLibC();
-    for(&packages) |package| {
+    for (&packages) |package| {
         exe.addPackage(package);
     }
     exe.setTarget(target);
     exe.setBuildMode(mode);
+    if (mode != .Debug) {
+        exe.strip = strip;
+    }
     exe.install();
+
     buildLibressl.useLibreSslForStep(b, exe, "vendor/zelda/zig-libressl/libressl");
 
     const run_cmd = exe.run();

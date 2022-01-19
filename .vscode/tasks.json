@@ -1,0 +1,17 @@
+{
+    // See https://go.microsoft.com/fwlink/?LinkId=733558
+    // for the documentation about the tasks.json format
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "build-debug",
+            "type": "shell",
+            "command": "zig build -Duse-system-libressl=true -Dstrip=true"
+        },
+        {
+            "label": "build-release",
+            "type": "shell",
+            "command": "zig build -Duse-system-libressl=true -Drelease-fast"
+        },
+    ]
+}
