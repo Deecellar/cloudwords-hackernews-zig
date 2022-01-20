@@ -76,17 +76,23 @@ pub fn build(b: *std.build.Builder) void {
     const strip: bool = b.option(bool, "strip", "Stripts the release build (false by default)") orelse false;
     const exe = b.addExecutable("cloudwords-hackernews-zig", "src/main.zig");
     exe.linkLibC();
+
     for (&packages) |package| {
         exe.addPackage(package);
     }
+
     exe.setTarget(target);
     exe.setBuildMode(mode);
     if (mode != .Debug) {
         exe.strip = strip;
     }
+    if (target.getOsTag() == .windows) {
+        exe.addLibPath("C:/Program Files/LibreSSL/lib");
+        exe.addIncludeDir("C:/Program Files/LibreSSL/include");
+    } 
+        buildLibressl.useLibreSslForStep(b, exe, "vendor/zelda/zig-libressl/libressl");
+    
     exe.install();
-
-    buildLibressl.useLibreSslForStep(b, exe, "vendor/zelda/zig-libressl/libressl");
 
     const run_cmd = exe.run();
     run_cmd.step.dependOn(b.getInstallStep());

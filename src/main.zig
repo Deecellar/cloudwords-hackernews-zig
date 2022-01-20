@@ -18,13 +18,14 @@ pub fn main() !void {
     defer arena.deinit();
     var allocator = arena.allocator();
     var max_hackerNews_size = try getHackernewsMaxValue(allocator);
-    var itemsToSave: []TextResponse = allocator.alloc(TextResponse, max_hackerNews_size);
-    var cacheDir: ?std.fs.Dir = getCacheDir(allocator, programUseCache);
+    var itemsToSave: []TextResponse = try allocator.alloc(TextResponse, max_hackerNews_size);
+    var cacheDir: ?std.fs.Dir = try getCacheDir(allocator, programUseCache);
 
     var index: MaxHackerNewsValue = max_hackerNews_size;
-    var retry_attempts = 0;
+    var retry_attempts: u8 = 0;
     while (index > 0) {
-        if (cacheDir) {
+        if (cacheDir) |dir| {
+            _ = dir;
             // TODO: Write This Branch (Get information from the cache)
         }
         // Normal Get Behaviour
@@ -45,28 +46,37 @@ pub fn main() !void {
         // TODO: save all files in items to save in a cache file
     }
     var cloudWordGenerator: CloudGenerator = CloudGenerator.init(allocator);
-    var stopwords: [][]const u8 = getStopWords(allocator, "", programUseCache);
+    var stopwords: [][]const u8 = try getStopWords(allocator, "", programUseCache);
     for (stopwords) |v| {
         cloudWordGenerator.addStopWord(v);
     }
-    var words: [][]const u8 = analyzeWords(allocator, itemsToSave);
+    var words: [][]const u8 = try analyzeWords(allocator, itemsToSave);
     for (words) |v| {
         cloudWordGenerator.addWord(v);
     }
     var fileNameBuffer: [4096]u8 = undefined;
-    var fileName = std.fmt.bufPrint(&fileNameBuffer, "zig-cloudword-{d}.svg", .{std.time.timestamp()});
+    var fileName = try std.fmt.bufPrint(&fileNameBuffer, "zig-cloudword-{d}.svg", .{std.time.timestamp()});
     var outFile: std.fs.File = try std.fs.cwd().createFile(fileName, std.fs.File.CreateFlags{});
     try outFile.writeAll(try cloudWordGenerator.generateCloudFile());
     outFile.close();
 }
-fn getStopWords(allocator: std.mem.Allocator, url: []const u8, useCache: bool) [][]const u8 {}
-fn analyzeWords(allocator: std.mem.Allocator, hackerNewsItems: []TextResponse) [][]const u8 {}
-fn getCacheDir(allocator: std.mem.Allocator, useCache: bool) ?std.fs.Dir {
+fn getStopWords(allocator: std.mem.Allocator, url: []const u8, useCache: bool) ![][]const u8 {
+    _ = allocator;
+    _ = useCache;
+    _ = url;
+    return std.mem.Allocator.Error.OutOfMemory;
+}
+fn analyzeWords(allocator: std.mem.Allocator, hackerNewsItems: []TextResponse) ![][]const u8 {
+    _ = allocator;
+    _ = hackerNewsItems;
+    return std.mem.Allocator.Error.OutOfMemory;
+}
+fn getCacheDir(allocator: std.mem.Allocator, useCache: bool) !?std.fs.Dir {
     if (!useCache) return null;
 
     var currentExeDir: []u8 = try std.fs.selfExeDirPathAlloc(allocator);
     defer allocator.free(currentExeDir);
-    var cachePath = std.fs.path.join(allocator, .{ currentExeDir, "cache" });
+    var cachePath = try std.fs.path.join(allocator, &.{ currentExeDir, "cache" });
     defer allocator.free(cachePath);
     // Let's check if the folder exist, otherwise create it
     var cacheDir = std.fs.openDirAbsolute(cachePath, std.fs.Dir.OpenDirOptions{}) catch blk: {
@@ -84,4 +94,8 @@ fn getHackernewsMaxValue(allocator: std.mem.Allocator) !MaxHackerNewsValue {
     return response;
 }
 
-fn getHackerNewsItem(allocator: std.mem.Allocator, id: MaxHackerNewsValue) !TextResponse {}
+fn getHackerNewsItem(allocator: std.mem.Allocator, id: MaxHackerNewsValue) !TextResponse {
+    _ = allocator;
+    _ = id;
+    return TextResponse{ .text = "", .title = "" };
+}
