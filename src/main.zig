@@ -26,40 +26,44 @@ pub fn main() !void {
     var threads: []std.Thread = try allocator.alloc(std.Thread, cpuCount);
     var cloudWordGenerator: CloudGenerator = CloudGenerator.init(allocator);
     try stdout.print("Starting collecting information, this can take a while\n", .{});
+
     { // This blocks are for defining an inner scope, so all defered deallocations are handled before making the file =)
         var max_hackerNews_size = try getHackernewsMaxValue(allocator);
+        var node = try progress.start("Downloading", max_hackerNews_size);
+
         var itemsToSave: []TextResponse = try allocator.alloc(TextResponse, max_hackerNews_size);
         defer allocator.free(itemsToSave);
         var cacheDir: ?std.fs.Dir = try getCacheDir(allocator, programUseCache);
 
-        var index: MaxHackerNewsValue = max_hackerNews_size;
-        while (index > 0) {
-            if (cacheDir) |dir| {
-                _ = dir;
-                // TODO: Write This Branch (Get information from the cache)
+        if (cacheDir) |dir| {
+            _ = dir;
+            // TODO: Write This Branch (Get information from the cache)
+        }
+        if (max_hackerNews_size % cpuCount == 0) {
+            var chunks: MaxHackerNewsValue = try std.math.divExact(MaxHackerNewsValue, max_hackerNews_size, cpuCount);
+            for (threads) |v, i| {
+                _ = v;
+                errdefer threads[i].join();
+                threads[i] = try std.Thread.spawn(.{}, saveItems, .{ allocator, itemsToSave, chunks * i, (chunks * i) + chunks });
             }
-            if (max_hackerNews_size % cpuCount == 0) {
-                var chunks: MaxHackerNewsValue = try std.math.divExact(MaxHackerNewsValue, max_hackerNews_size, cpuCount);
-                for (threads) |v, i| {
-                    _ = v;
-                    errdefer threads[i].join();
-                    threads[i] = try std.Thread.spawn(.{}, saveItems, .{ allocator, itemsToSave, chunks * i, (chunks * i) + chunks });
-                }
-            } else {
-                var chunks: MaxHackerNewsValue = try std.math.divFloor(MaxHackerNewsValue, max_hackerNews_size, cpuCount);
-                for (threads) |v, i| {
-                    _ = v;
-                    errdefer threads[i].join();
-                    threads[i] = try std.Thread.spawn(.{}, saveItems, .{ allocator, itemsToSave, chunks * i, (chunks * i) + (chunks + if (i == cpuCount - 1) @as(MaxHackerNewsValue, 1) else @as(MaxHackerNewsValue, 0)) });
-                }
-            }
-            for (threads) |v| {
-                v.join();
+        } else {
+            var chunks: MaxHackerNewsValue = try std.math.divFloor(MaxHackerNewsValue, max_hackerNews_size, cpuCount);
+            for (threads) |v, i| {
+                _ = v;
+                errdefer threads[i].join();
+                threads[i] = try std.Thread.spawn(.{}, saveItems, .{ allocator, itemsToSave, chunks * i, (chunks * i) + (chunks + if (i == cpuCount - 1) @as(MaxHackerNewsValue, 1) else @as(MaxHackerNewsValue, 0)) });
             }
         }
+        for (threads) |v| {
+            v.join();
+        }
+
         if (programUseCache) {
             // TODO: save all files in items to save in a cache file
         }
+        node.completeOne();
+        var stopword = node.start("Getting stopwords", 1);
+        stopword.activate();
         var stopwords: [][]const u8 = try getStopWords(allocator, stopwordURL, programUseCache);
         var words: []WordFrequency = try analyzeWords(allocator, itemsToSave, stopwords);
         for (words) |v| {
@@ -68,12 +72,14 @@ pub fn main() !void {
         // Free all the stuff we don't need, why now, because we have a 500mb+ gb allocated =)
         try stdout.print("Dealing with resources, please wait a moment\n", .{});
     }
+    var fileGen = progress.root.start("Generating File", 1);
+    fileGen.activate();
     var fileNameBuffer: [4096]u8 = undefined;
     var fileName = try std.fmt.bufPrint(&fileNameBuffer, "zig-cloudword-{d}.svg", .{std.time.timestamp()});
-    try stdout.print("Starting the generation of the file, this can take a while\n", .{});
     var outFile: std.fs.File = try std.fs.cwd().createFile(fileName, std.fs.File.CreateFlags{});
     try outFile.writeAll(try cloudWordGenerator.generateCloudFile());
     outFile.close();
+    fileGen.completeOne();
     try stdout.print("Done\n", .{});
 }
 fn getStopWords(allocator: std.mem.Allocator, url: []const u8, useCache: bool) ![][]const u8 {
@@ -85,12 +91,15 @@ fn getStopWords(allocator: std.mem.Allocator, url: []const u8, useCache: bool) !
     }
     var response = try zelda.get(allocator, url);
     defer response.deinit();
-
+    progress.root.completeOne();
     if (response.body) |body| {
+        var stopWord = progress.root.start("Creating List of Stop Words", 1);
+        stopWord.activate();
         var bodySplit = std.mem.split(u8, body, "\n");
         while (bodySplit.next()) |value| {
             try listOfWords.append(value);
             try listOfWords.append(" ");
+            stopWord.completeOne();
         }
     }
 
@@ -99,19 +108,24 @@ fn getStopWords(allocator: std.mem.Allocator, url: []const u8, useCache: bool) !
 fn analyzeWords(allocator: std.mem.Allocator, hackerNewsItems: []TextResponse, stopWords: [][]const u8) ![]WordFrequency {
     var pointer: std.ArrayList([]const u8) = try std.ArrayList([]const u8).initCapacity(allocator, @divFloor(hackerNewsItems.len, 10)); // We allocate the 10% to make this a bit faster
     defer pointer.deinit();
+    var zigComments = progress.root.start("Getting Items related to Zig", 0);
+    zigComments.activate();
     for (hackerNewsItems) |items, i| {
         var zigPosTitle = std.mem.indexOfAny(u8, items.title, "zig");
         var zigPosText = std.mem.indexOfAny(u8, items.title, "zig");
         if (zigPosTitle != null) {
             try pointer.append(hackerNewsItems[i].title);
+            zigComments.completeOne();
         }
         if (zigPosText != null) {
             try pointer.append(hackerNewsItems[i].text);
+            zigComments.completeOne();
         }
     }
     var set: std.StringArrayHashMap(u64) = std.StringArrayHashMap(u64).init(allocator);
     defer set.deinit();
-
+    var gettingWords = progress.root.start("Analyzing Frequency of words", 0);
+    gettingWords.activate();
     for (pointer.items) |item| {
         var titleIterator = std.mem.tokenize(u8, item, " <>");
         while (titleIterator.next()) |val| external: {
@@ -126,6 +140,7 @@ fn analyzeWords(allocator: std.mem.Allocator, hackerNewsItems: []TextResponse, s
             } else {
                 v.value_ptr.* = 1;
             }
+            gettingWords.completeOne();
         }
     }
     var wordFrequencies: std.ArrayList(WordFrequency) = std.ArrayList(WordFrequency).init(allocator);
@@ -187,6 +202,7 @@ fn saveItems(allocator: std.mem.Allocator, slice: []TextResponse, start: usize, 
     var index: usize = end;
     var retry_attempts: u8 = 0;
     while (index > start) {
+        progress.root.activate();
         slice[index - 1] = getHackerNewsItem(allocator, client, index) catch blk: {
             // TODO: handle correctly errors
             if (retry_attempts >= 3) {
@@ -199,5 +215,6 @@ fn saveItems(allocator: std.mem.Allocator, slice: []TextResponse, start: usize, 
         };
         index -= 1;
         retry_attempts = 0;
+        progress.root.completeOne();
     }
 }
