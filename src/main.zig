@@ -23,7 +23,7 @@ pub fn main() !void {
     var allocator = gpa.allocator();
     var stdout = std.io.getStdOut().writer();
     const cpuCount = try std.Thread.getCpuCount();
-    var threads: []std.Thread = try allocator.alloc(std.Thread, cpuCount);
+    var threads: []std.Thread = try allocator.alloc(std.Thread, cpuCount - 2);
     var cloudWordGenerator: CloudGenerator = CloudGenerator.init(allocator);
     try stdout.print("Starting collecting information, this can take a while\n", .{});
 
@@ -39,15 +39,15 @@ pub fn main() !void {
             _ = dir;
             // TODO: Write This Branch (Get information from the cache)
         }
-        if (max_hackerNews_size % cpuCount == 0) {
-            var chunks: MaxHackerNewsValue = try std.math.divExact(MaxHackerNewsValue, max_hackerNews_size, cpuCount);
+        if (max_hackerNews_size % threads.len == 0) {
+            var chunks: MaxHackerNewsValue = try std.math.divExact(MaxHackerNewsValue, max_hackerNews_size, threads.len);
             for (threads) |v, i| {
                 _ = v;
                 errdefer threads[i].join();
                 threads[i] = try std.Thread.spawn(.{}, saveItems, .{ allocator, itemsToSave, chunks * i, (chunks * i) + chunks });
             }
         } else {
-            var chunks: MaxHackerNewsValue = try std.math.divFloor(MaxHackerNewsValue, max_hackerNews_size, cpuCount);
+            var chunks: MaxHackerNewsValue = try std.math.divFloor(MaxHackerNewsValue, max_hackerNews_size, threads.len);
             for (threads) |v, i| {
                 _ = v;
                 errdefer threads[i].join();
