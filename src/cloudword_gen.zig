@@ -5,11 +5,7 @@ pub const CloudGenerator = struct {
         _ = self;
         return std.mem.Allocator.Error.OutOfMemory;
     }
-    pub fn addWord(self: CloudGenerator, word: []const u8) void {
-        _ = self;
-        _ = word;
-    }
-    pub fn addStopWord(self: CloudGenerator, word: []const u8) void {
+    pub fn addWord(self: CloudGenerator, word: WordFreq) void {
         _ = self;
         _ = word;
     }
@@ -17,4 +13,9 @@ pub const CloudGenerator = struct {
         _ = allocator;
         return CloudGenerator{};
     }
+};
+
+pub const WordFreq = struct {
+    text: []const u8,
+    frequency: u64,
 };

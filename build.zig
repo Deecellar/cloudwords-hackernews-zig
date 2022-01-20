@@ -83,15 +83,15 @@ pub fn build(b: *std.build.Builder) void {
 
     exe.setTarget(target);
     exe.setBuildMode(mode);
-    if (mode != .Debug) {
+    if (mode != .Debug or mode != .ReleaseSafe) {
         exe.strip = strip;
     }
     if (target.getOsTag() == .windows) {
         exe.addLibPath("C:/Program Files/LibreSSL/lib");
         exe.addIncludeDir("C:/Program Files/LibreSSL/include");
-    } 
-        buildLibressl.useLibreSslForStep(b, exe, "vendor/zelda/zig-libressl/libressl");
-    
+    }
+    buildLibressl.useLibreSslForStep(b, exe, "vendor/zelda/zig-libressl/libressl");
+
     exe.install();
 
     const run_cmd = exe.run();
